@@ -1,0 +1,350 @@
+{
+  "name": "difftool-review",
+  "displayName": "Difftool Review",
+  "description": "Review changes made by an AI assistant: minimal Changes/Staged panel, the built-in diff editor, looping file navigation and review comments copied as AI feedback.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Difftool Review relies on the built-in Git extension, which is disabled in Restricted Mode."
+    }
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "difftoolReview",
+          "title": "Difftool Review",
+          "icon": "media/review.svg"
+        }
+      ]
+    },
+    "views": {
+      "difftoolReview": [
+        {
+          "id": "difftoolReview.files",
+          "name": "Files"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "difftoolReview.files",
+        "contents": "No Git repository found.\nOpen a folder that contains a Git repository to review its changes.",
+        "when": "isWorkspaceTrusted && !difftoolReview.hasRepo"
+      },
+      {
+        "view": "difftoolReview.files",
+        "contents": "Difftool Review needs a trusted workspace: Git is disabled in Restricted Mode.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "!isWorkspaceTrusted"
+      }
+    ],
+    "commands": [
+      {
+        "command": "difftoolReview.focus",
+        "title": "Difftool Review: Open Review Panel"
+      },
+      {
+        "command": "difftoolReview.nextFile",
+        "title": "Difftool Review: Next File in Group"
+      },
+      {
+        "command": "difftoolReview.prevFile",
+        "title": "Difftool Review: Previous File in Group"
+      },
+      {
+        "command": "difftoolReview.switchGroup",
+        "title": "Difftool Review: Switch Group (Staged/Changes)"
+      },
+      {
+        "command": "difftoolReview.startStaged",
+        "title": "Difftool Review: Review Staged Changes"
+      },
+      {
+        "command": "difftoolReview.startChanges",
+        "title": "Difftool Review: Review Changes"
+      },
+      {
+        "command": "difftoolReview.nextChange",
+        "title": "Difftool Review: Next Change"
+      },
+      {
+        "command": "difftoolReview.prevChange",
+        "title": "Difftool Review: Previous Change"
+      },
+      {
+        "command": "difftoolReview.openFile",
+        "title": "Difftool Review: Open Diff"
+      },
+      {
+        "command": "difftoolReview.stageFile",
+        "title": "Difftool Review: Stage File",
+        "icon": "$(add)"
+      },
+      {
+        "command": "difftoolReview.unstageFile",
+        "title": "Difftool Review: Unstage File",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "difftoolReview.stageLines",
+        "title": "Difftool Review: Stage Selected Lines"
+      },
+      {
+        "command": "difftoolReview.unstageLines",
+        "title": "Difftool Review: Unstage Selected Lines"
+      },
+      {
+        "command": "difftoolReview.addComment",
+        "title": "Difftool Review: Add Comment"
+      },
+      {
+        "command": "difftoolReview.createComment",
+        "title": "Add Comment"
+      },
+      {
+        "command": "difftoolReview.deleteThread",
+        "title": "Delete Comment",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "difftoolReview.editComment",
+        "title": "Edit Comment",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "difftoolReview.saveComment",
+        "title": "Save"
+      },
+      {
+        "command": "difftoolReview.cancelEditComment",
+        "title": "Cancel"
+      },
+      {
+        "command": "difftoolReview.copyReview",
+        "title": "Difftool Review: Copy Review for AI",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "difftoolReview.clearComments",
+        "title": "Difftool Review: Clear All Comments",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "difftoolReview.refresh",
+        "title": "Difftool Review: Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "keybindings": [
+      {
+        "key": "ctrl+alt+r",
+        "command": "difftoolReview.focus"
+      },
+      {
+        "key": "alt+n",
+        "command": "difftoolReview.nextFile",
+        "when": "difftoolReview.hasRepo"
+      },
+      {
+        "key": "alt+p",
+        "command": "difftoolReview.prevFile",
+        "when": "difftoolReview.hasRepo"
+      },
+      {
+        "key": "alt+g",
+        "command": "difftoolReview.switchGroup",
+        "when": "difftoolReview.hasRepo"
+      },
+      {
+        "key": "alt+.",
+        "command": "difftoolReview.nextChange",
+        "when": "difftoolReview.reviewing"
+      },
+      {
+        "key": "alt+,",
+        "command": "difftoolReview.prevChange",
+        "when": "difftoolReview.reviewing"
+      },
+      {
+        "key": "alt+s",
+        "command": "difftoolReview.stageFile",
+        "when": "difftoolReview.reviewing && difftoolReview.group == 'changes'"
+      },
+      {
+        "key": "alt+u",
+        "command": "difftoolReview.unstageFile",
+        "when": "difftoolReview.reviewing && difftoolReview.group == 'staged'"
+      },
+      {
+        "key": "ctrl+alt+s",
+        "command": "difftoolReview.stageLines",
+        "when": "difftoolReview.reviewing && difftoolReview.group == 'changes'"
+      },
+      {
+        "key": "ctrl+alt+u",
+        "command": "difftoolReview.unstageLines",
+        "when": "difftoolReview.reviewing && difftoolReview.group == 'staged'"
+      },
+      {
+        "key": "ctrl+alt+c",
+        "command": "difftoolReview.addComment",
+        "when": "difftoolReview.reviewing"
+      },
+      {
+        "key": "ctrl+alt+shift+c",
+        "command": "difftoolReview.copyReview",
+        "when": "difftoolReview.hasComments"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "difftoolReview.copyReview",
+          "when": "view == difftoolReview.files && difftoolReview.hasComments",
+          "group": "navigation@1"
+        },
+        {
+          "command": "difftoolReview.refresh",
+          "when": "view == difftoolReview.files",
+          "group": "navigation@2"
+        },
+        {
+          "command": "difftoolReview.clearComments",
+          "when": "view == difftoolReview.files && difftoolReview.hasComments",
+          "group": "1_comments"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "difftoolReview.stageFile",
+          "when": "view == difftoolReview.files && viewItem == change",
+          "group": "inline"
+        },
+        {
+          "command": "difftoolReview.unstageFile",
+          "when": "view == difftoolReview.files && viewItem == staged",
+          "group": "inline"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "difftoolReview.createComment",
+          "group": "inline",
+          "when": "commentController == difftoolReview && commentThreadIsEmpty"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "difftoolReview.deleteThread",
+          "group": "navigation",
+          "when": "commentController == difftoolReview && !commentThreadIsEmpty"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "difftoolReview.editComment",
+          "group": "group@1",
+          "when": "commentController == difftoolReview"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "difftoolReview.cancelEditComment",
+          "group": "inline@1",
+          "when": "commentController == difftoolReview"
+        },
+        {
+          "command": "difftoolReview.saveComment",
+          "group": "inline@2",
+          "when": "commentController == difftoolReview"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "difftoolReview.openFile",
+          "when": "false"
+        },
+        {
+          "command": "difftoolReview.createComment",
+          "when": "false"
+        },
+        {
+          "command": "difftoolReview.deleteThread",
+          "when": "false"
+        },
+        {
+          "command": "difftoolReview.editComment",
+          "when": "false"
+        },
+        {
+          "command": "difftoolReview.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "difftoolReview.cancelEditComment",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Difftool Review",
+      "properties": {
+        "difftoolReview.includeUntracked": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show untracked files in the Changes group."
+        },
+        "difftoolReview.closePreviousDiff": {
+          "type": "boolean",
+          "default": true,
+          "description": "Close the previous review diff when opening another file."
+        },
+        "difftoolReview.clearCommentsAfterCopy": {
+          "type": "boolean",
+          "default": false,
+          "description": "Remove all comments after copying the review."
+        },
+        "difftoolReview.copyPreamble": {
+          "type": "string",
+          "default": "Please address the following review comments on your changes:",
+          "description": "Text placed at the top of the copied review."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "test": "npm run compile && mocha \"out/test/unit/**/*.test.js\"",
+    "test:integration": "npm run compile && node ./out/test/integration/runTest.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.19.43",
+    "@types/vscode": "~1.90.0",
+    "@vscode/test-electron": "^3.1.0",
+    "eslint": "^10.12.0",
+    "mocha": "^12.0.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}
