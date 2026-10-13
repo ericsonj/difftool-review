@@ -4,10 +4,24 @@ import * as vscode from 'vscode';
 import { API, GitExtension, Repository } from '../../git/git';
 
 // Runs against the repository created by scripts/make-test-repo.sh:
-// staged:  modified.ts (M), deleted.py (D), new_name.txt (R), added.go (A), both.js (M)
-// changes: both.js (M), untracked.rs (U)
-const STAGED = ['added.go', 'both.js', 'deleted.py', 'modified.ts', 'new_name.txt'];
-const CHANGES = ['both.js', 'untracked.rs'];
+// staged:  modified.ts (M), deleted.py (D), new_name.txt (R), added.go (A), both.js (M),
+//          src/index.ts (M), src/util/strings.ts (M), src/tree/view.ts (A), docs/guide/intro.md (A)
+// changes: both.js (M), untracked.rs (U), lib/helpers/format.ts (M)
+// Listed in tree view mode order: depth-first, folders before files.
+const STAGED_TREE = [
+  'docs/guide/intro.md',
+  'src/tree/view.ts',
+  'src/util/strings.ts',
+  'src/index.ts',
+  'added.go',
+  'both.js',
+  'deleted.py',
+  'modified.ts',
+  'new_name.txt',
+];
+const CHANGES_TREE = ['lib/helpers/format.ts', 'both.js', 'untracked.rs'];
+const STAGED = STAGED_TREE.map(file => path.posix.basename(file)).sort();
+const CHANGES = CHANGES_TREE.map(file => path.posix.basename(file)).sort();
 const EMPTY_SCHEME = 'difftool-review-empty';
 
 async function waitFor<T>(probe: () => T | undefined, description: string): Promise<T> {
@@ -112,13 +126,37 @@ describe('Difftool Review', () => {
     assert.strictEqual(diffTabCount(), 1);
   });
 
+  it('follows the tree order in tree view mode', async () => {
+    // The empty side of a deleted file keeps the file's path, so this works for every status.
+    const relativePath = (uri: vscode.Uri): string => path.posix.relative(repository.rootUri.path, uri.path);
+    const groups = [
+      ['difftoolReview.startStaged', STAGED_TREE],
+      ['difftoolReview.startChanges', CHANGES_TREE],
+    ] as const;
+    await vscode.commands.executeCommand('difftoolReview.viewAsTree');
+    try {
+      assert.strictEqual(vscode.workspace.getConfiguration('difftoolReview').get('viewMode'), 'tree');
+      for (const [start, expected] of groups) {
+        await vscode.commands.executeCommand(start);
+        const visited = [relativePath(activeDiff().modified)];
+        for (let step = 1; step < expected.length; step++) {
+          await vscode.commands.executeCommand('difftoolReview.nextFile');
+          visited.push(relativePath(activeDiff().modified));
+        }
+        assert.deepStrictEqual(visited, expected, start);
+      }
+    } finally {
+      await vscode.commands.executeCommand('difftoolReview.viewAsList');
+    }
+  });
+
   it('stages the file under review and continues with the remaining one', async () => {
     await vscode.commands.executeCommand('difftoolReview.startChanges');
     const staged = fileName(activeDiff().modified);
     await vscode.commands.executeCommand('difftoolReview.stageFile');
     await waitFor(
-      () => (repository.state.workingTreeChanges.length + repository.state.untrackedChanges.length === 1
-        ? true : undefined),
+      () => (repository.state.workingTreeChanges.length + repository.state.untrackedChanges.length
+        === CHANGES.length - 1 ? true : undefined),
       'the file to leave the Changes group',
     );
 

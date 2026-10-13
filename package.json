@@ -149,6 +149,16 @@
         "command": "difftoolReview.refresh",
         "title": "Difftool Review: Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "difftoolReview.viewAsTree",
+        "title": "Difftool Review: View as Tree",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "difftoolReview.viewAsList",
+        "title": "Difftool Review: View as List",
+        "icon": "$(list-flat)"
       }
     ],
     "keybindings": [
@@ -215,6 +225,16 @@
     "menus": {
       "view/title": [
         {
+          "command": "difftoolReview.viewAsTree",
+          "when": "view == difftoolReview.files && config.difftoolReview.viewMode == list",
+          "group": "navigation@0"
+        },
+        {
+          "command": "difftoolReview.viewAsList",
+          "when": "view == difftoolReview.files && config.difftoolReview.viewMode == tree",
+          "group": "navigation@0"
+        },
+        {
           "command": "difftoolReview.copyReview",
           "when": "view == difftoolReview.files && difftoolReview.hasComments",
           "group": "navigation@1"
@@ -277,6 +297,14 @@
       ],
       "commandPalette": [
         {
+          "command": "difftoolReview.viewAsTree",
+          "when": "config.difftoolReview.viewMode == list"
+        },
+        {
+          "command": "difftoolReview.viewAsList",
+          "when": "config.difftoolReview.viewMode == tree"
+        },
+        {
           "command": "difftoolReview.openFile",
           "when": "false"
         },
@@ -305,6 +333,19 @@
     "configuration": {
       "title": "Difftool Review",
       "properties": {
+        "difftoolReview.viewMode": {
+          "type": "string",
+          "enum": [
+            "list",
+            "tree"
+          ],
+          "enumDescriptions": [
+            "Show the files of each group as a flat list, with their folder next to the name.",
+            "Show the files of each group nested in folders; single-child folders are compacted."
+          ],
+          "default": "list",
+          "description": "How the Files panel shows changed files. In tree mode, file navigation follows the tree order."
+        },
         "difftoolReview.includeUntracked": {
           "type": "boolean",
           "default": true,

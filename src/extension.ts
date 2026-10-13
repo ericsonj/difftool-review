@@ -6,7 +6,7 @@ import { EMPTY_SCHEME, EmptyContentProvider } from './diff/emptyProvider';
 import { Change } from './git/git';
 import { GitService, Group } from './git/gitService';
 import { Navigator } from './navigation/navigator';
-import { isFileNode, ReviewTree, StatusDecorationProvider } from './tree/reviewTree';
+import { isFileNode, ReviewTree, StatusDecorationProvider, ViewMode } from './tree/reviewTree';
 import { setContext } from './util/context';
 import { errorMessage } from './util/errors';
 
@@ -68,6 +68,8 @@ function registerNavigationCommands(context: vscode.ExtensionContext, { git, nav
   register(context, 'difftoolReview.startChanges', () => navigator.start('changes'));
   register(context, 'difftoolReview.openFile', (group: Group, change: Change) => navigator.open(group, change));
   register(context, 'difftoolReview.refresh', () => git.refresh());
+  register(context, 'difftoolReview.viewAsTree', () => setViewMode('tree'));
+  register(context, 'difftoolReview.viewAsList', () => setViewMode('list'));
   // The built-in "next/previous change" (Alt+F5) act on the active diff editor
   // even when focus is elsewhere.
   register(context, 'difftoolReview.nextChange', () =>
@@ -113,6 +115,18 @@ function registerCommentCommands(context: vscode.ExtensionContext, { comments }:
     comments.cancelEditComment(comment));
   register(context, 'difftoolReview.copyReview', () => copyReview(comments));
   register(context, 'difftoolReview.clearComments', () => comments.confirmAndClearAll());
+}
+
+/**
+ * Writes the view mode where it is currently set, so a workspace value does
+ * not keep overriding the toggle. The tree follows the configuration change.
+ */
+async function setViewMode(mode: ViewMode): Promise<void> {
+  const config = vscode.workspace.getConfiguration('difftoolReview');
+  const target = config.inspect<ViewMode>('viewMode')?.workspaceValue !== undefined
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+  await config.update('viewMode', mode, target);
 }
 
 /**

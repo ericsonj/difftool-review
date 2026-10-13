@@ -4,6 +4,7 @@ import { Change } from '../git/git';
 import { changeKey, GitService, Group, GROUPS } from '../git/gitService';
 import { describeStatus } from '../git/status';
 import { Debouncer } from '../util/debouncer';
+import { buildFileTree, FolderEntry, flattenFileTree } from './fileTree';
 
 /**
  * Scheme of the tree items' `resourceUri`. A custom scheme keeps the file icon
@@ -17,13 +18,29 @@ export interface GroupNode {
   readonly group: Group;
 }
 
+export interface FolderNode {
+  readonly kind: 'folder';
+  readonly group: Group;
+  readonly entry: FolderEntry<Change>;
+}
+
 export interface FileNode {
   readonly kind: 'file';
   readonly group: Group;
   readonly change: Change;
 }
 
-export type Node = GroupNode | FileNode;
+export type Node = GroupNode | FolderNode | FileNode;
+
+export type ViewMode = 'list' | 'tree';
+
+/** One group laid out as folders, cached until git or the view mode changes. */
+interface GroupTree {
+  readonly root: FolderEntry<Change>;
+  readonly files: Change[];
+  /** Containing folder of each file (`file:<key>`) and folder (`folder:<path>`). */
+  readonly parents: Map<string, FolderEntry<Change>>;
+}
 
 const GROUP_LABELS: Record<Group, string> = {
   changes: 'Changes',
@@ -43,10 +60,24 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     staged: { kind: 'group', group: 'staged' },
   };
   private readonly refresher = new Debouncer(() => this.emitter.fire(undefined), 100);
-  private readonly subscription: vscode.Disposable;
+  private readonly groupTrees = new Map<Group, GroupTree>();
+  private readonly subscriptions: vscode.Disposable[];
 
   constructor(private readonly git: GitService) {
-    this.subscription = git.onDidChange(() => this.refresh());
+    // The cache is cleared right away, not debounced: the navigator reads the
+    // file order while handling the same events.
+    this.subscriptions = [
+      git.onDidChange(() => this.invalidate()),
+      vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('difftoolReview.viewMode')) {
+          this.invalidate();
+        }
+      }),
+    ];
+  }
+
+  get viewMode(): ViewMode {
+    return vscode.workspace.getConfiguration('difftoolReview').get<ViewMode>('viewMode', 'list');
   }
 
   refresh(): void {
@@ -57,6 +88,11 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     return { kind: 'file', group, change };
   }
 
+  /** The files of a group in the order the panel shows them. */
+  files(group: Group): Change[] {
+    return this.viewMode === 'tree' ? this.groupTree(group).files : this.git.list(group);
+  }
+
   getChildren(node?: Node): Node[] {
     if (!node) {
       return this.git.repo ? GROUPS.map(group => this.groupNodes[group]) : [];
@@ -64,22 +100,66 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     if (node.kind === 'file') {
       return [];
     }
-    return this.git.list(node.group).map(change => this.fileNode(node.group, change));
+    if (this.viewMode === 'list') {
+      return this.git.list(node.group).map(change => this.fileNode(node.group, change));
+    }
+    const folder = node.kind === 'folder' ? node.entry : this.groupTree(node.group).root;
+    return [
+      ...folder.folders.map(entry => this.folderNode(node.group, entry)),
+      ...folder.files.map(change => this.fileNode(node.group, change)),
+    ];
   }
 
   /** Required by `TreeView.reveal`, used to highlight the file under review. */
   getParent(node: Node): Node | undefined {
-    return node.kind === 'file' ? this.groupNodes[node.group] : undefined;
+    if (node.kind === 'group') {
+      return undefined;
+    }
+    if (this.viewMode === 'list') {
+      return this.groupNodes[node.group];
+    }
+    const { root, parents } = this.groupTree(node.group);
+    const key = node.kind === 'file' ? `file:${changeKey(node.change)}` : `folder:${node.entry.path}`;
+    const parent = parents.get(key);
+    return !parent || parent === root ? this.groupNodes[node.group] : this.folderNode(node.group, parent);
   }
 
   getTreeItem(node: Node): vscode.TreeItem {
-    return node.kind === 'group' ? this.groupItem(node) : this.fileItem(node);
+    switch (node.kind) {
+      case 'group':
+        return this.groupItem(node);
+      case 'folder':
+        return this.folderItem(node);
+      case 'file':
+        return this.fileItem(node);
+    }
   }
 
   dispose(): void {
-    this.subscription.dispose();
+    this.subscriptions.forEach(subscription => { subscription.dispose(); });
     this.refresher.dispose();
     this.emitter.dispose();
+  }
+
+  private invalidate(): void {
+    this.groupTrees.clear();
+    this.refresh();
+  }
+
+  private folderNode(group: Group, entry: FolderEntry<Change>): FolderNode {
+    return { kind: 'folder', group, entry };
+  }
+
+  private groupTree(group: Group): GroupTree {
+    let groupTree = this.groupTrees.get(group);
+    if (!groupTree) {
+      const rootPath = this.git.repo?.rootUri.path ?? '/';
+      const relativePath = (change: Change): string => path.posix.relative(rootPath, change.uri.path);
+      const root = buildFileTree(this.git.list(group), relativePath, true);
+      groupTree = { root, files: flattenFileTree(root), parents: indexParents(root) };
+      this.groupTrees.set(group, groupTree);
+    }
+    return groupTree;
   }
 
   private groupItem(node: GroupNode): vscode.TreeItem {
@@ -93,13 +173,29 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     return item;
   }
 
+  private folderItem(node: FolderNode): vscode.TreeItem {
+    const { group, entry } = node;
+    const item = new vscode.TreeItem(entry.name, vscode.TreeItemCollapsibleState.Expanded);
+    item.id = `folder:${group}:${entry.path}`;
+    item.iconPath = vscode.ThemeIcon.Folder;
+    const root = this.git.repo?.rootUri;
+    if (root) {
+      // Lets the file icon theme pick the folder icon.
+      item.resourceUri = vscode.Uri.joinPath(root, entry.path);
+    }
+    item.tooltip = entry.path;
+    item.contextValue = 'folder';
+    return item;
+  }
+
   private fileItem(node: FileNode): vscode.TreeItem {
     const { group, change } = node;
     const relativePath = vscode.workspace.asRelativePath(change.uri, false);
     const folder = path.posix.dirname(relativePath);
     const item = new vscode.TreeItem(itemUri(group, change), vscode.TreeItemCollapsibleState.None);
     item.id = `${group}:${changeKey(change)}`;
-    item.description = folder === '.' ? '' : folder;
+    // In tree mode the folder is already shown by the parent node.
+    item.description = folder === '.' || this.viewMode === 'tree' ? '' : folder;
     item.tooltip = fileTooltip(change, relativePath);
     item.contextValue = group === 'staged' ? 'staged' : 'change';
     item.command = {
@@ -109,6 +205,19 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     };
     return item;
   }
+}
+
+function indexParents(root: FolderEntry<Change>): Map<string, FolderEntry<Change>> {
+  const parents = new Map<string, FolderEntry<Change>>();
+  const visit = (folder: FolderEntry<Change>): void => {
+    folder.files.forEach(change => { parents.set(`file:${changeKey(change)}`, folder); });
+    folder.folders.forEach(child => {
+      parents.set(`folder:${child.path}`, folder);
+      visit(child);
+    });
+  };
+  visit(root);
+  return parents;
 }
 
 function itemUri(group: Group, change: Change): vscode.Uri {

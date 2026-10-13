@@ -2,7 +2,7 @@
 
 Review changes made by an AI assistant in VS Code: a minimal panel with **Changes** and **Staged Changes**, the built-in diff editor, file navigation that loops within one group, and review comments you can copy as feedback for an AI chat.
 
-See [difftool-review-plan.md](difftool-review-plan.md) for the design.
+See `difftool-review-plan.md` in the source repository for the design.
 
 ## Shortcuts
 
@@ -35,6 +35,7 @@ If a shortcut does not fire, run **Developer: Toggle Keyboard Shortcuts Troubles
 
 | Setting | Default | |
 |---|---|---|
+| `difftoolReview.viewMode` | `list` | Show files as a flat `list` or nested in a `tree` of folders (single-child folders compacted); `Alt+N`/`Alt+P` follow the tree order. Toggle with the list/tree button in the panel title |
 | `difftoolReview.includeUntracked` | `true` | Show untracked files in the Changes group |
 | `difftoolReview.closePreviousDiff` | `true` | Close the previous review diff when opening another file |
 | `difftoolReview.clearCommentsAfterCopy` | `false` | Remove all comments after copying the review |

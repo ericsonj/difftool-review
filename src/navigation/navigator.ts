@@ -32,7 +32,7 @@ export class Navigator implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[];
 
   constructor(
-    private readonly git: GitService,
+    git: GitService,
     private readonly opener: DiffOpener,
     private readonly tree: ReviewTree,
     private readonly treeView: vscode.TreeView<unknown>,
@@ -70,7 +70,7 @@ export class Navigator implements vscode.Disposable {
     if (group !== this.group) {
       return undefined;
     }
-    return this.git.list(group).find(change => changeKey(change) === this.currentKey);
+    return this.tree.files(group).find(change => changeKey(change) === this.currentKey);
   }
 
   dispose(): void {
@@ -85,7 +85,7 @@ export class Navigator implements vscode.Disposable {
   }
 
   private async startGroup(group: Group): Promise<void> {
-    if (this.git.list(group).length === 0) {
+    if (this.tree.files(group).length === 0) {
       showEmptyGroup(group);
       return;
     }
@@ -96,7 +96,7 @@ export class Navigator implements vscode.Disposable {
   }
 
   private async move(direction: Direction): Promise<void> {
-    const items = this.git.list(this.group);
+    const items = this.tree.files(this.group);
     const index = pickIndex(items.map(changeKey), this.currentKey, this.lastIndex, direction);
     if (index === -1) {
       showEmptyGroup(this.group);
@@ -107,7 +107,7 @@ export class Navigator implements vscode.Disposable {
 
   private async show(group: Group, change: Change): Promise<void> {
     const key = changeKey(change);
-    const index = this.git.list(group).findIndex(item => changeKey(item) === key);
+    const index = this.tree.files(group).findIndex(item => changeKey(item) === key);
     this.group = group;
     this.currentKey = key;
     this.lastIndex = Math.max(index, 0);
@@ -133,7 +133,7 @@ export class Navigator implements vscode.Disposable {
       return undefined;
     }
     for (const group of GROUPS) {
-      const items = this.git.list(group);
+      const items = this.tree.files(group);
       const index = items.findIndex(change => isDiffTab(tab, this.opener.uris(group, change)));
       if (index !== -1) {
         return { group, change: items[index], index };
