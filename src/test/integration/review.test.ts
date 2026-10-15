@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { API, GitExtension, Repository } from '../../git/git';
@@ -54,6 +55,25 @@ function fileName(uri: vscode.Uri): string {
 
 function gitRef(uri: vscode.Uri): string | undefined {
   return uri.scheme === 'git' ? (JSON.parse(uri.query) as { ref: string }).ref : undefined;
+}
+
+/** Starts the Changes group and returns the file names it loops over. */
+async function changesGroupFiles(): Promise<string[]> {
+  await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  await vscode.commands.executeCommand('difftoolReview.startChanges');
+  if (!(vscode.window.tabGroups.activeTabGroup.activeTab?.input instanceof vscode.TabInputTextDiff)) {
+    return []; // The group is empty.
+  }
+  const first = fileName(activeDiff().modified);
+  const visited = [first];
+  for (;;) {
+    await vscode.commands.executeCommand('difftoolReview.nextFile');
+    const name = fileName(activeDiff().modified);
+    if (name === first) {
+      return visited.sort();
+    }
+    visited.push(name);
+  }
 }
 
 async function visitAll(count: number): Promise<string[]> {
@@ -147,6 +167,48 @@ describe('Difftool Review', () => {
       }
     } finally {
       await vscode.commands.executeCommand('difftoolReview.viewAsList');
+    }
+  });
+
+  it('filters the Changes group to the files changed during an AI session', async () => {
+    const root = repository.rootUri.fsPath;
+    const both = path.join(root, 'both.js');
+    const created = path.join(root, 'ai_new.ts');
+    const bothBefore = await fs.promises.readFile(both, 'utf8');
+    await vscode.commands.executeCommand('difftoolReview.startAiSession');
+    try {
+      // both.js already had an unstaged user edit before the session.
+      await fs.promises.appendFile(both, 'ai line\n');
+      await fs.promises.writeFile(created, 'export const ai = true;\n');
+      await repository.status();
+      const deadline = Date.now() + 15_000;
+      let files = await changesGroupFiles();
+      while (files.join() !== 'ai_new.ts,both.js' && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        files = await changesGroupFiles();
+      }
+      assert.deepStrictEqual(files, ['ai_new.ts', 'both.js']);
+
+      await vscode.commands.executeCommand('difftoolReview.startChanges');
+      const sides = new Map<string, vscode.TabInputTextDiff>();
+      for (let step = 0; step < 2; step++) {
+        sides.set(fileName(activeDiff().modified), activeDiff());
+        await vscode.commands.executeCommand('difftoolReview.nextFile');
+      }
+      assert.strictEqual(sides.get('ai_new.ts')?.original.scheme, EMPTY_SCHEME);
+      const bothDiff = sides.get('both.js')!;
+      assert.match(gitRef(bothDiff.original) ?? '', /^[0-9a-f]{40,64}$/, 'the left side is the snapshot tree');
+      const left = (await vscode.workspace.openTextDocument(bothDiff.original)).getText();
+      assert.ok(left.includes('unstaged line'), 'the user edit is part of the snapshot');
+      assert.ok(!left.includes('ai line'), 'the AI edit is not');
+
+      await vscode.commands.executeCommand('difftoolReview.showAllChanges');
+      assert.deepStrictEqual(await changesGroupFiles(), [...CHANGES, 'ai_new.ts'].sort());
+    } finally {
+      await vscode.commands.executeCommand('difftoolReview.stopAiSession');
+      await fs.promises.writeFile(both, bothBefore);
+      await fs.promises.rm(created, { force: true });
+      await repository.status();
     }
   });
 

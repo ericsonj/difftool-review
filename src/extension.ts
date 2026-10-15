@@ -6,6 +6,8 @@ import { EMPTY_SCHEME, EmptyContentProvider } from './diff/emptyProvider';
 import { Change } from './git/git';
 import { GitService, Group } from './git/gitService';
 import { Navigator } from './navigation/navigator';
+import { AiSession } from './session/aiSession';
+import { enableTerminalShortcuts, offerTerminalShortcuts } from './terminal/terminalShortcuts';
 import { isFileNode, ReviewTree, StatusDecorationProvider, ViewMode } from './tree/reviewTree';
 import { setContext } from './util/context';
 import { errorMessage } from './util/errors';
@@ -15,6 +17,7 @@ interface Services {
   readonly tree: ReviewTree;
   readonly navigator: Navigator;
   readonly comments: ReviewComments;
+  readonly session: AiSession;
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -29,16 +32,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  const tree = new ReviewTree(git);
+  const session = new AiSession(git, context.workspaceState);
+  const tree = new ReviewTree(git, session);
   const treeView = vscode.window.createTreeView('difftoolReview.files', {
     treeDataProvider: tree,
     showCollapseAll: false,
   });
-  const navigator = new Navigator(git, new DiffOpener(git.api), tree, treeView);
+  const navigator = new Navigator(git, new DiffOpener(git.api, session), tree, treeView);
   const comments = new ReviewComments(git);
   const updateHasRepo = (): Promise<void> => setContext('difftoolReview.hasRepo', git.repo !== undefined);
 
   context.subscriptions.push(
+    session,
     tree,
     treeView,
     navigator,
@@ -46,11 +51,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.workspace.registerTextDocumentContentProvider(EMPTY_SCHEME, new EmptyContentProvider()),
     vscode.window.registerFileDecorationProvider(new StatusDecorationProvider()),
     git.onDidChange(() => void updateHasRepo()),
+    offerTerminalShortcuts(context.globalState),
   );
   await updateHasRepo();
 
-  const services: Services = { git, tree, navigator, comments };
+  const services: Services = { git, tree, navigator, comments, session };
   registerNavigationCommands(context, services);
+  registerSessionCommands(context, services);
   registerStagingCommands(context, services);
   registerCommentCommands(context, services);
 }
@@ -61,6 +68,7 @@ export function deactivate(): void {
 
 function registerNavigationCommands(context: vscode.ExtensionContext, { git, navigator }: Services): void {
   register(context, 'difftoolReview.focus', () => vscode.commands.executeCommand('difftoolReview.files.focus'));
+  register(context, 'difftoolReview.enableTerminalShortcuts', () => enableTerminalShortcuts());
   register(context, 'difftoolReview.nextFile', () => navigator.next());
   register(context, 'difftoolReview.prevFile', () => navigator.previous());
   register(context, 'difftoolReview.switchGroup', () => navigator.switchGroup());
@@ -76,6 +84,14 @@ function registerNavigationCommands(context: vscode.ExtensionContext, { git, nav
     vscode.commands.executeCommand('workbench.action.compareEditor.nextChange'));
   register(context, 'difftoolReview.prevChange', () =>
     vscode.commands.executeCommand('workbench.action.compareEditor.previousChange'));
+}
+
+function registerSessionCommands(context: vscode.ExtensionContext, { session }: Services): void {
+  register(context, 'difftoolReview.startAiSession', () => session.start());
+  register(context, 'difftoolReview.restartAiSession', () => session.start());
+  register(context, 'difftoolReview.stopAiSession', () => session.stop());
+  register(context, 'difftoolReview.showAiChanges', () => session.setFilter(true));
+  register(context, 'difftoolReview.showAllChanges', () => session.setFilter(false));
 }
 
 function registerStagingCommands(context: vscode.ExtensionContext, { git, navigator }: Services): void {

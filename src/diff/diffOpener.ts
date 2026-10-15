@@ -4,6 +4,12 @@ import { Group } from '../git/gitService';
 import { isAddition, isDeletion } from '../git/status';
 import { emptyUri } from './emptyProvider';
 
+/** Where the left side of a Changes diff comes from while reviewing an AI session. */
+export interface SessionBaselines {
+  /** The snapshot taken when the session started, or `undefined` outside a session review. */
+  baseline(change: Change): { readonly tree: string; readonly exists: boolean } | undefined;
+}
+
 export interface DiffSides {
   readonly left: vscode.Uri;
   readonly right: vscode.Uri;
@@ -14,12 +20,16 @@ export interface DiffSides {
  *
  * The refs mirror `getLeftResource` / `getRightResource` of the Git extension:
  * `HEAD` is the last commit, `''` the index and `~` the index (or HEAD when the
- * file is not staged).
+ * file is not staged). While reviewing an AI session, the left side of a
+ * Changes diff is the file as it was when the session started.
  */
 export class DiffOpener {
   private lastSides: DiffSides | undefined;
 
-  constructor(private readonly git: API) {}
+  constructor(
+    private readonly git: API,
+    private readonly session: SessionBaselines,
+  ) {}
 
   uris(group: Group, change: Change): DiffSides {
     const added = isAddition(change.status);
@@ -28,6 +38,13 @@ export class DiffOpener {
       return {
         left: added ? emptyUri(change.uri) : this.git.toGitUri(change.originalUri, 'HEAD'),
         right: deleted ? emptyUri(change.uri) : this.git.toGitUri(change.uri, ''),
+      };
+    }
+    const baseline = this.session.baseline(change);
+    if (baseline) {
+      return {
+        left: baseline.exists ? this.git.toGitUri(change.uri, baseline.tree) : emptyUri(change.uri),
+        right: deleted ? emptyUri(change.uri) : change.uri,
       };
     }
     return {
@@ -40,7 +57,7 @@ export class DiffOpener {
     const sides = this.uris(group, change);
     const previous = this.lastSides;
     const name = vscode.workspace.asRelativePath(change.uri);
-    const title = `${name} (${group === 'staged' ? 'Staged' : 'Changes'})`;
+    const title = `${name} (${diffLabel(group, this.session.baseline(change) !== undefined)})`;
 
     await vscode.commands.executeCommand('vscode.diff', sides.left, sides.right, title, {
       preview: true,
@@ -51,6 +68,13 @@ export class DiffOpener {
       await closeDiffTabs(previous);
     }
   }
+}
+
+function diffLabel(group: Group, sessionReview: boolean): string {
+  if (group === 'staged') {
+    return 'Staged';
+  }
+  return sessionReview ? 'AI Session' : 'Changes';
 }
 
 export function isDiffTab(tab: vscode.Tab, sides: DiffSides): boolean {

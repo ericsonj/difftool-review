@@ -41,6 +41,8 @@ export class Navigator implements vscode.Disposable {
       vscode.window.tabGroups.onDidChangeTabs(() => this.syncFromActiveTab()),
       vscode.window.tabGroups.onDidChangeTabGroups(() => this.syncFromActiveTab()),
       git.onDidChange(() => this.syncFromActiveTab()),
+      // Which diff is a review diff also depends on the AI session filter.
+      tree.onDidChangeTreeData(() => this.syncFromActiveTab()),
     ];
     this.syncFromActiveTab();
   }

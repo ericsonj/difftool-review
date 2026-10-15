@@ -4,7 +4,9 @@ export type ContextKey =
   | 'difftoolReview.hasRepo'
   | 'difftoolReview.reviewing'
   | 'difftoolReview.group'
-  | 'difftoolReview.hasComments';
+  | 'difftoolReview.hasComments'
+  | 'difftoolReview.aiSession'
+  | 'difftoolReview.aiFilter';
 
 const currentValues = new Map<ContextKey, unknown>();
 

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { Change } from '../git/git';
 import { changeKey, GitService, Group, GROUPS } from '../git/gitService';
 import { describeStatus } from '../git/status';
+import { AiSession } from '../session/aiSession';
 import { Debouncer } from '../util/debouncer';
 import { buildFileTree, FolderEntry, flattenFileTree } from './fileTree';
 
@@ -63,11 +64,15 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
   private readonly groupTrees = new Map<Group, GroupTree>();
   private readonly subscriptions: vscode.Disposable[];
 
-  constructor(private readonly git: GitService) {
+  constructor(
+    private readonly git: GitService,
+    private readonly session: AiSession,
+  ) {
     // The cache is cleared right away, not debounced: the navigator reads the
     // file order while handling the same events.
     this.subscriptions = [
       git.onDidChange(() => this.invalidate()),
+      session.onDidChange(() => this.invalidate()),
       vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('difftoolReview.viewMode')) {
           this.invalidate();
@@ -90,7 +95,7 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
 
   /** The files of a group in the order the panel shows them. */
   files(group: Group): Change[] {
-    return this.viewMode === 'tree' ? this.groupTree(group).files : this.git.list(group);
+    return this.viewMode === 'tree' ? this.groupTree(group).files : this.list(group);
   }
 
   getChildren(node?: Node): Node[] {
@@ -101,7 +106,7 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
       return [];
     }
     if (this.viewMode === 'list') {
-      return this.git.list(node.group).map(change => this.fileNode(node.group, change));
+      return this.list(node.group).map(change => this.fileNode(node.group, change));
     }
     const folder = node.kind === 'folder' ? node.entry : this.groupTree(node.group).root;
     return [
@@ -141,6 +146,14 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     this.emitter.dispose();
   }
 
+  /** The files of a group; while filtering, Changes only keeps the AI session's files. */
+  private list(group: Group): Change[] {
+    const changes = this.git.list(group);
+    return group === 'changes' && this.session.filterActive
+      ? changes.filter(change => this.session.isSessionChange(change))
+      : changes;
+  }
+
   private invalidate(): void {
     this.groupTrees.clear();
     this.refresh();
@@ -155,7 +168,7 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
     if (!groupTree) {
       const rootPath = this.git.repo?.rootUri.path ?? '/';
       const relativePath = (change: Change): string => path.posix.relative(rootPath, change.uri.path);
-      const root = buildFileTree(this.git.list(group), relativePath, true);
+      const root = buildFileTree(this.list(group), relativePath, true);
       groupTree = { root, files: flattenFileTree(root), parents: indexParents(root) };
       this.groupTrees.set(group, groupTree);
     }
@@ -163,9 +176,10 @@ export class ReviewTree implements vscode.TreeDataProvider<Node>, vscode.Disposa
   }
 
   private groupItem(node: GroupNode): vscode.TreeItem {
-    const count = this.git.list(node.group).length;
+    const count = this.list(node.group).length;
+    const filtered = node.group === 'changes' && this.session.filterActive;
     const item = new vscode.TreeItem(
-      `${GROUP_LABELS[node.group]} (${count})`,
+      `${GROUP_LABELS[node.group]}${filtered ? ' — AI Session' : ''} (${count})`,
       vscode.TreeItemCollapsibleState.Expanded,
     );
     item.id = `group:${node.group}`;
