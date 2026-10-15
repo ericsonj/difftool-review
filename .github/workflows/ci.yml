@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
+
+      # @vscode/vsce needs Node 22 or later.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      # VS Code downloaded by @vscode/test-electron, refreshed weekly.
+      - name: Week number
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: .vscode-test
+          key: vscode-test-${{ runner.os }}-${{ steps.week.outputs.week }}
+
+      # VS Code needs a display; xvfb-run provides a virtual one.
+      - name: Integration tests
+        run: xvfb-run -a pnpm test:integration
+
+      - name: Package
+        run: pnpm run package
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix
+          path: '*.vsix'
+          if-no-files-found: error
