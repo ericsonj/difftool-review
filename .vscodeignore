@@ -9,3 +9,11 @@ tsconfig.json
 eslint.config.mjs
 .gitignore
 difftool-review-plan.md
+plans/**
+next-version.md
+*.vsix
+pnpm-lock.yaml
+.github/**
+media/icon.svg
+*-pat.txt
+.env*

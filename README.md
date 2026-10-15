@@ -2,7 +2,7 @@
 
 Review changes made by an AI assistant in VS Code: a minimal panel with **Changes** and **Staged Changes**, the built-in diff editor, file navigation that loops within one group, and review comments you can copy as feedback for an AI chat.
 
-See `difftool-review-plan.md` in the source repository for the design.
+Install it from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=ericsonjoseph.difftool-review) or run `code --install-extension ericsonjoseph.difftool-review`.
 
 ## Shortcuts
 
@@ -20,16 +20,30 @@ See `difftool-review-plan.md` in the source repository for the design.
 
 Shortcuts depend on extension state (context keys), not on focus, so they work from the tree, the editor and webview panels.
 
-**Integrated terminal:** VS Code sends most keys to the shell while a terminal has focus. To use the shortcuts there, add the commands to `terminal.integrated.commandsToSkipShell` in your user settings:
+**Integrated terminal:** VS Code sends most keys to the shell while a terminal has focus, so the shortcuts only work there when their commands are listed in `terminal.integrated.commandsToSkipShell`. The first time a terminal is open, Difftool Review offers to add them to your user settings; you can also run **Difftool Review: Enable Shortcuts in Terminal** at any time. It adds:
 
 ```jsonc
 "terminal.integrated.commandsToSkipShell": [
-  "difftoolReview.nextFile", "difftoolReview.prevFile", "difftoolReview.switchGroup",
-  "difftoolReview.nextChange", "difftoolReview.prevChange", "difftoolReview.copyReview"
+  "difftoolReview.focus", "difftoolReview.nextFile", "difftoolReview.prevFile",
+  "difftoolReview.switchGroup", "difftoolReview.nextChange", "difftoolReview.prevChange",
+  "difftoolReview.stageFile", "difftoolReview.unstageFile", "difftoolReview.copyReview"
 ]
 ```
 
+Once added, the shell no longer receives these keys while their shortcut is active (e.g. `Alt+.` "insert last argument" during a review). To keep one for the shell, add it with a leading `-`, e.g. `"-difftoolReview.nextChange"`; the command leaves such entries alone.
+
 If a shortcut does not fire, run **Developer: Toggle Keyboard Shortcuts Troubleshooting**, press the key and check the Output panel for conflicts.
+
+## AI sessions
+
+When you already have unstaged work of your own, the files an AI assistant edits get mixed into it in the Changes group. An AI session separates them:
+
+1. Click **Start AI Session** (sparkle button in the panel title) before asking the assistant for changes. It records the working tree as it is now (a git tree object; the index is not touched).
+2. Let the assistant work. The Changes group shows only the files that differ from that recording: edited, created or deleted since the start. The diff of each file compares with the recording, so your earlier edits to the same file are not shown.
+3. Toggle with the filter button (or the one on the Changes row) to see all changes again.
+4. **Restart AI Session** (panel `...` menu) moves the start to now, e.g. before the assistant's next turn. **Stop AI Session** ends it.
+
+Files you edit yourself during a session count as session changes too. New files only show while `difftoolReview.includeUntracked` is on. The session survives a window reload.
 
 ## Settings
 
@@ -44,7 +58,7 @@ If a shortcut does not fire, run **Developer: Toggle Keyboard Shortcuts Troubles
 ## Development
 
 ```bash
-npm install
+pnpm install
 ./scripts/make-test-repo.sh   # creates /tmp/difftool-review-test
 ```
 
@@ -54,10 +68,21 @@ Difftool Review needs a trusted workspace: in Restricted Mode VS Code does not l
 
 | Command | |
 |---|---|
-| `npm run compile` / `npm run watch` | Build with `tsc` into `out/` |
-| `npm run lint` | ESLint (typescript-eslint, type-checked) |
-| `npm test` | Unit tests (mocha, plain Node) |
-| `npm run test:integration` | Integration tests inside VS Code; set `VSCODE_EXECUTABLE=/usr/share/code/code` to use the installed VS Code instead of downloading one |
-| `npx @vscode/vsce package` | Build the `.vsix` |
+| `pnpm compile` / `pnpm watch` | Build with `tsc` into `out/` |
+| `pnpm lint` | ESLint (typescript-eslint, type-checked) |
+| `pnpm test` | Unit tests (mocha, plain Node) |
+| `pnpm test:integration` | Integration tests inside VS Code; set `VSCODE_EXECUTABLE=/usr/share/code/code` to use the installed VS Code instead of downloading one |
+| `pnpm package` | Build the `.vsix` (`vsce package --no-dependencies`: the extension has no runtime dependencies, and vsce's dependency scan does not support pnpm's `node_modules` layout) |
 
 The build uses plain `tsc` rather than a bundler: `Status` in `src/git/git.d.ts` is a `const enum` that only `tsc` can inline, and the extension has no runtime dependencies to bundle.
+
+## Releasing
+
+Publishing a GitHub Release runs `.github/workflows/release.yml`: it runs the tests, packages one `.vsix`, publishes it to the Visual Studio Marketplace and attaches it to the release.
+
+1. Bump `version` in `package.json` and add a `CHANGELOG.md` entry, commit (`chore(release): v0.2.0`) and push.
+2. `gh release create v0.2.0 --generate-notes`
+
+The tag must be `v` + the `package.json` version. The Marketplace has no semver pre-release versions, so channels use the minor number: **even** minor (`0.2.x`) for releases, **odd** minor (`0.3.x`) for GitHub pre-releases (`gh release create v0.3.0 --prerelease`), which are published with `--pre-release`. The workflow fails if tag, version or channel do not match.
+
+The workflow needs the secret `VSCE_PAT` (Azure DevOps token, scope *Marketplace → Manage*) in the `marketplace` environment.

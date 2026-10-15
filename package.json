@@ -2,8 +2,29 @@
   "name": "difftool-review",
   "displayName": "Difftool Review",
   "description": "Review changes made by an AI assistant: minimal Changes/Staged panel, the built-in diff editor, looping file navigation and review comments copied as AI feedback.",
-  "version": "0.0.1",
-  "publisher": "local",
+  "version": "0.1.0",
+  "publisher": "ericsonjoseph",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e293b",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ericsonj/difftool-review.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ericsonj/difftool-review/issues"
+  },
+  "homepage": "https://github.com/ericsonj/difftool-review#readme",
+  "keywords": [
+    "git",
+    "diff",
+    "review",
+    "ai",
+    "staging"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -58,6 +79,10 @@
       {
         "command": "difftoolReview.focus",
         "title": "Difftool Review: Open Review Panel"
+      },
+      {
+        "command": "difftoolReview.enableTerminalShortcuts",
+        "title": "Difftool Review: Enable Shortcuts in Terminal"
       },
       {
         "command": "difftoolReview.nextFile",
@@ -159,6 +184,31 @@
         "command": "difftoolReview.viewAsList",
         "title": "Difftool Review: View as List",
         "icon": "$(list-flat)"
+      },
+      {
+        "command": "difftoolReview.startAiSession",
+        "title": "Difftool Review: Start AI Session",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "difftoolReview.restartAiSession",
+        "title": "Difftool Review: Restart AI Session",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "difftoolReview.stopAiSession",
+        "title": "Difftool Review: Stop AI Session",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "difftoolReview.showAiChanges",
+        "title": "Difftool Review: Show Only AI Session Changes",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "difftoolReview.showAllChanges",
+        "title": "Difftool Review: Show All Changes",
+        "icon": "$(filter-filled)"
       }
     ],
     "keybindings": [
@@ -225,29 +275,54 @@
     "menus": {
       "view/title": [
         {
+          "command": "difftoolReview.startAiSession",
+          "when": "view == difftoolReview.files && difftoolReview.hasRepo && !difftoolReview.aiSession",
+          "group": "navigation@0"
+        },
+        {
+          "command": "difftoolReview.showAiChanges",
+          "when": "view == difftoolReview.files && difftoolReview.aiSession && !difftoolReview.aiFilter",
+          "group": "navigation@0"
+        },
+        {
+          "command": "difftoolReview.showAllChanges",
+          "when": "view == difftoolReview.files && difftoolReview.aiSession && difftoolReview.aiFilter",
+          "group": "navigation@0"
+        },
+        {
           "command": "difftoolReview.viewAsTree",
           "when": "view == difftoolReview.files && config.difftoolReview.viewMode == list",
-          "group": "navigation@0"
+          "group": "navigation@1"
         },
         {
           "command": "difftoolReview.viewAsList",
           "when": "view == difftoolReview.files && config.difftoolReview.viewMode == tree",
-          "group": "navigation@0"
+          "group": "navigation@1"
         },
         {
           "command": "difftoolReview.copyReview",
           "when": "view == difftoolReview.files && difftoolReview.hasComments",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "difftoolReview.refresh",
           "when": "view == difftoolReview.files",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "difftoolReview.clearComments",
           "when": "view == difftoolReview.files && difftoolReview.hasComments",
           "group": "1_comments"
+        },
+        {
+          "command": "difftoolReview.restartAiSession",
+          "when": "view == difftoolReview.files && difftoolReview.aiSession",
+          "group": "2_aiSession@1"
+        },
+        {
+          "command": "difftoolReview.stopAiSession",
+          "when": "view == difftoolReview.files && difftoolReview.aiSession",
+          "group": "2_aiSession@2"
         }
       ],
       "view/item/context": [
@@ -259,6 +334,16 @@
         {
           "command": "difftoolReview.unstageFile",
           "when": "view == difftoolReview.files && viewItem == staged",
+          "group": "inline"
+        },
+        {
+          "command": "difftoolReview.showAiChanges",
+          "when": "view == difftoolReview.files && viewItem == group-changes && difftoolReview.aiSession && !difftoolReview.aiFilter",
+          "group": "inline"
+        },
+        {
+          "command": "difftoolReview.showAllChanges",
+          "when": "view == difftoolReview.files && viewItem == group-changes && difftoolReview.aiSession && difftoolReview.aiFilter",
           "group": "inline"
         }
       ],
@@ -296,6 +381,26 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "difftoolReview.startAiSession",
+          "when": "difftoolReview.hasRepo && !difftoolReview.aiSession"
+        },
+        {
+          "command": "difftoolReview.restartAiSession",
+          "when": "difftoolReview.aiSession"
+        },
+        {
+          "command": "difftoolReview.stopAiSession",
+          "when": "difftoolReview.aiSession"
+        },
+        {
+          "command": "difftoolReview.showAiChanges",
+          "when": "difftoolReview.aiSession && !difftoolReview.aiFilter"
+        },
+        {
+          "command": "difftoolReview.showAllChanges",
+          "when": "difftoolReview.aiSession && difftoolReview.aiFilter"
+        },
         {
           "command": "difftoolReview.viewAsTree",
           "when": "config.difftoolReview.viewMode == list"
@@ -370,12 +475,14 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "pnpm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src",
-    "test": "npm run compile && mocha \"out/test/unit/**/*.test.js\"",
-    "test:integration": "npm run compile && node ./out/test/integration/runTest.js"
+    "test": "pnpm run compile && mocha \"out/test/unit/**/*.test.js\"",
+    "test:integration": "pnpm run compile && node ./out/test/integration/runTest.js",
+    "package": "vsce package --no-dependencies",
+    "package:pre": "vsce package --no-dependencies --pre-release"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -383,9 +490,16 @@
     "@types/node": "^20.19.43",
     "@types/vscode": "~1.90.0",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "4.0.0",
     "eslint": "^10.12.0",
     "mocha": "^12.0.3",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vscode/vsce-sign"
+    ]
   }
 }
